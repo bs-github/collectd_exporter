@@ -50,8 +50,26 @@ var (
 	collectdPostPath = flag.String("web.collectd-push-path", "/collectd-post", "Path under which to accept POST requests from collectd.")
 	lastPush         = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "collectd_last_push_timestamp_seconds",
+			Name: "collectd_exporter_last_push_timestamp_seconds",
 			Help: "Unix timestamp of the last received collectd metrics push in seconds.",
+		},
+	)
+	countOfMetrics = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "collectd_exporter_number_of_metrics_in_cache",
+			Help: "Number of collectd metrics currently in the cache.",
+		},
+	)
+	MetricsRecieved = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "collectd_exporter_number_of_metrics_recieved",
+			Help: "Number of collectd metrics recieved since start of the collectd_exporter.",
+		},
+	)
+	OutdatedMetricsRecieved = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "collectd_exporter_number_of_outdated_metrics_recieved",
+			Help: "Number of outdated collectd metrics recieved since start of the collectd_exporter.",
 		},
 	)
 )
@@ -120,6 +138,7 @@ func newMetric(vl api.ValueList, index int) (prometheus.Metric, error) {
 		return nil, fmt.Errorf("unknown value type: %T", v)
 	}
 
+	MetricsRecieved.Add(1)
 	return prometheus.NewConstMetric(newDesc(vl, index), valueType, value)
 }
 
@@ -174,6 +193,7 @@ func (c *collectdCollector) processSamples() {
 			for id, vl := range c.valueLists {
 				validUntil := vl.Time.Add(timeout * vl.Interval)
 				if validUntil.Before(now) {
+					log.Debugln("delete outdated value ", id)
 					delete(c.valueLists, id)
 				}
 			}
@@ -184,7 +204,11 @@ func (c *collectdCollector) processSamples() {
 
 // Collect implements prometheus.Collector.
 func (c collectdCollector) Collect(ch chan<- prometheus.Metric) {
+	countOfMetrics.Set(float64(len(c.valueLists)))
 	ch <- lastPush
+	ch <- countOfMetrics
+	ch <- MetricsRecieved
+	ch <- OutdatedMetricsRecieved
 
 	c.mu.Lock()
 	valueLists := make([]api.ValueList, 0, len(c.valueLists))
@@ -197,6 +221,8 @@ func (c collectdCollector) Collect(ch chan<- prometheus.Metric) {
 	for _, vl := range valueLists {
 		validUntil := vl.Time.Add(timeout * vl.Interval)
 		if validUntil.Before(now) {
+			log.Debugln("skip outdated value ", vl.Identifier.String(), now, validUntil, vl.Interval)
+			OutdatedMetricsRecieved.Add(1)
 			continue
 		}
 
@@ -215,6 +241,9 @@ func (c collectdCollector) Collect(ch chan<- prometheus.Metric) {
 // Describe implements prometheus.Collector.
 func (c collectdCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- lastPush.Desc()
+	ch <- countOfMetrics.Desc()
+	ch <- MetricsRecieved.Desc()
+	ch <- OutdatedMetricsRecieved.Desc()
 }
 
 // Write writes "vl" to the collector's channel, to be (asynchronously)
