@@ -33,11 +33,6 @@ import (
 	"github.com/prometheus/common/version"
 )
 
-// timeout specifies the number of iterations after which a metric times out,
-// i.e. becomes stale and is removed from collectdCollector.valueLists. It is
-// modeled and named after the top-level "Timeout" setting of collectd.
-const timeout = 2
-
 var (
 	showVersion      = flag.Bool("version", false, "Print version information.")
 	listenAddress    = flag.String("web.listen-address", ":9103", "Address on which to expose metrics and web interface.")
@@ -46,6 +41,8 @@ var (
 	collectdAuth     = flag.String("collectd.auth-file", "", "File mapping user names to pre-shared keys (passwords).")
 	collectdSecurity = flag.String("collectd.security-level", "None", "Minimum required security level for accepted packets. Must be one of \"None\", \"Sign\" and \"Encrypt\".")
 	collectdTypesDB  = flag.String("collectd.typesdb-file", "", "Collectd types.db file for datasource names mapping. Needed only if using a binary network protocol.")
+	collectdTimeout  = flag.Int("collectd.timeout", 2, "Collectd timeout specifies the number of iterations after which a metric times out (same as the top-level Timeout setting of collectd).")
+	timeout          = time.Duration(*collectdTimeout)
 	metricsPath      = flag.String("web.telemetry-path", "/metrics", "Path under which to expose Prometheus metrics.")
 	collectdPostPath = flag.String("web.collectd-push-path", "/collectd-post", "Path under which to accept POST requests from collectd.")
 	lastPush         = prometheus.NewGauge(
