@@ -311,6 +311,7 @@ func startCollectdServer(ctx context.Context, w api.Writer) {
 		if err = srv.Conn.SetReadBuffer(*collectdBuffer); err != nil {
 			log.Fatal(err)
 		}
+		log.Infoln("Configuring ReadBuffer size to ", *collectdBuffer)
 	}
 
 	go func() {
